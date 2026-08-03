@@ -4,7 +4,6 @@ from flask_socketio import SocketIO, emit
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 
-# Initialize SocketIO with gevent async mode and cross-origin permissions
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 @app.route('/')
@@ -19,10 +18,8 @@ def handle_connect():
 def handle_disconnect():
     print('Client disconnected')
 
-# Handle drawing or pixel placement events from clients
 @socketio.on('draw_pixel')
 def handle_draw_pixel(data):
-    # Broadcast the drawing action to all other connected clients
     emit('update_pixel', data, broadcast=True, include_self=False)
 
 if __name__ == '__main__':
