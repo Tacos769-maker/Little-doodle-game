@@ -129,7 +129,7 @@
 
     <!-- Game Screen -->
     <div id="game-container">
-        <div class="instruction">Left-click: Draw/Erase | Right-click: Erase | Ctrl+Z: Undo</div>
+        <div class="instruction">Left-click & Drag: Draw/Erase lines | Right-click: Erase | Ctrl+Z: Undo</div>
         <canvas id="worldCanvas" width="1000" height="650"></canvas>
         
         <div class="ui-bar">
@@ -192,6 +192,7 @@
             let key = `${x},${y}`;
             let previousColor = worldBlocks[key] || null;
 
+            // Only track if the color is actually changing
             if (recordHistory && previousColor !== color) {
                 myHistory.push({ x: x, y: y, oldColor: previousColor });
             }
@@ -202,6 +203,7 @@
         function undoAction() {
             if (myHistory.length === 0) return;
             let lastAction = myHistory.pop();
+            // Send the previous color back to the board without recording a new history action
             socket.emit('place_block', {x: lastAction.x, y: lastAction.y, color: lastAction.oldColor});
         }
 
@@ -264,19 +266,25 @@
         });
 
         let isDrawing = false;
+        let lastDraggedTile = null;
 
         function handleDrawing(event) {
             let rect = canvas.getBoundingClientRect();
             let mouseX = event.clientX - rect.left;
             let mouseY = event.clientY - rect.top;
 
-            let broadcastColor = isEraser ? '#ff0000' : selectedColor; // Show red cursor when erasing
+            let broadcastColor = isEraser ? '#ff0000' : selectedColor; 
             socket.emit('mouse_move', {x: mouseX, y: mouseY, color: broadcastColor});
 
             if (!isDrawing) return;
 
             let gx = Math.floor(mouseX / TILE_SIZE);
             let gy = Math.floor(mouseY / TILE_SIZE);
+            let tileKey = `${gx},${gy}`;
+
+            // Prevent spamming the exact same tile while dragging inside it
+            if (tileKey === lastDraggedTile) return;
+            lastDraggedTile = tileKey;
 
             if (event.buttons === 1) {
                 let paintColor = isEraser ? null : selectedColor;
@@ -291,6 +299,7 @@
             let rect = canvas.getBoundingClientRect();
             let gx = Math.floor((event.clientX - rect.left) / TILE_SIZE);
             let gy = Math.floor((event.clientY - rect.top) / TILE_SIZE);
+            lastDraggedTile = `${gx},${gy}`;
 
             if (event.button === 0) {
                 let paintColor = isEraser ? null : selectedColor;
@@ -302,13 +311,14 @@
 
         window.addEventListener('mouseup', function() {
             isDrawing = false;
+            lastDraggedTile = null;
         });
 
         canvas.addEventListener('mousemove', handleDrawing);
         canvas.addEventListener('contextmenu', e => e.preventDefault());
 
         window.addEventListener('keydown', function(event) {
-            if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
                 event.preventDefault();
                 undoAction();
             }
