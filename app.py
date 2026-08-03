@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+app.config['SECRET_KEY'] = 'secret!'
 
-grid_state = {}
+# Initialize SocketIO with gevent async mode and cross-origin permissions
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 @app.route('/')
 def index():
@@ -12,31 +13,17 @@ def index():
 
 @socketio.on('connect')
 def handle_connect():
-    emit('load_world', grid_state)
+    print('Client connected')
 
-@socketio.on('place_block')
-def handle_place_block(data):
-    x = data['x']
-    y = data['y']
-    color = data['color']
-    
-    key = f"{x},{y}"
-    if color is None:
-        if key in grid_state:
-            del grid_state[key]
-    else:
-        grid_state[key] = color
-        
-    emit('update_block', {'x': x, 'y': y, 'color': color}, broadcast=True)
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected')
 
-@socketio.on('clear_board')
-def handle_clear():
-    grid_state.clear()
-    emit('clear_board', broadcast=True)
-
-@socketio.on('mouse_move')
-def handle_mouse_move(data):
-    emit('update_cursor', {'id': request.sid, 'x': data['x'], 'y': data['y'], 'color': data['color']}, broadcast=True)
+# Handle drawing or pixel placement events from clients
+@socketio.on('draw_pixel')
+def handle_draw_pixel(data):
+    # Broadcast the drawing action to all other connected clients
+    emit('update_pixel', data, broadcast=True, include_self=False)
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, port=5000)
+    socketio.run(app)
