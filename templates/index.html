@@ -3,34 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Little Doodle Game</title>
+    <title>Little Doodle Game - Pixel Grid</title>
     <style>
         body {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            background-color: #222;
+            min-height: 100vh;
+            background-color: #1a1a1a;
             color: white;
             font-family: Arial, sans-serif;
             margin: 0;
         }
         #controls {
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
-        canvas {
-            border: 2px solid white;
-            background-color: white;
-            cursor: crosshair;
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(30, 20px);
+            grid-template-rows: repeat(20, 20px);
+            gap: 1px;
+            background-color: #444;
+            border: 2px solid #fff;
+        }
+        .pixel {
+            width: 20px;
+            height: 20px;
+            background-color: #fff;
+            cursor: pointer;
         }
         .color-btn {
             width: 30px;
             height: 30px;
-            display: inline-block;
-            margin: 0 5px;
             border: 2px solid #fff;
             cursor: pointer;
+        }
+        .color-btn.active {
+            border-color: #00ffff;
+            transform: scale(1.1);
         }
     </style>
 </head>
@@ -39,79 +53,79 @@
     <h1>Little Doodle Game</h1>
     
     <div id="controls">
-        <div class="color-btn" style="background-color: black;" onclick="setColor('black')"></div>
-        <div class="color-btn" style="background-color: red;" onclick="setColor('red')"></div>
-        <div class="color-btn" style="background-color: blue;" onclick="setColor('blue')"></div>
-        <div class="color-btn" style="background-color: green;" onclick="setColor('green')"></div>
-        <div class="color-btn" style="background-color: yellow;" onclick="setColor('yellow')"></div>
-        <button onclick="clearCanvas()">Clear</button>
+        <div class="color-btn active" style="background-color: black;" onclick="setColor('black', this)"></div>
+        <div class="color-btn" style="background-color: red;" onclick="setColor('red', this)"></div>
+        <div class="color-btn" style="background-color: blue;" onclick="setColor('blue', this)"></div>
+        <div class="color-btn" style="background-color: green;" onclick="setColor('green', this)"></div>
+        <div class="color-btn" style="background-color: yellow;" onclick="setColor('yellow', this)"></div>
+        <div class="color-btn" style="background-color: white;" onclick="setColor('white', this)"></div>
+        <button onclick="clearGrid()">Clear All</button>
     </div>
 
-    <canvas id="doodleCanvas" width="600" height="400"></canvas>
+    <div id="grid"></div>
 
-    <!-- Include Socket.IO client library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script>
-        const socket = io(); // Connects to the server automatically
-        const canvas = document.getElementById('doodleCanvas');
-        const ctx = canvas.getContext('2d');
-
-        let drawing = false;
+        const socket = io();
+        const grid = document.getElementById('grid');
         let currentColor = 'black';
+        let isMouseDown = false;
 
-        function setColor(color) {
+        // Build the grid cells (30x20)
+        const cols = 30;
+        const rows = 20;
+        const pixels = {};
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const id = `${r}-${c}`;
+                const pixel = document.createElement('div');
+                pixel.classList.add('pixel');
+                pixel.dataset.id = id;
+
+                pixel.addEventListener('mousedown', () => {
+                    isMouseDown = true;
+                    paintPixel(pixel, id);
+                });
+
+                pixel.addEventListener('mouseover', () => {
+                    if (isMouseDown) {
+                        paintPixel(pixel, id);
+                    }
+                });
+
+                grid.appendChild(pixel);
+                pixels[id] = pixel;
+            }
+        }
+
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        function setColor(color, element) {
             currentColor = color;
+            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
+            if (element) element.classList.add('active');
         }
 
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        function paintPixel(pixel, id) {
+            pixel.style.backgroundColor = currentColor;
+            socket.emit('draw_pixel', { id: id, color: currentColor });
         }
 
-        // Track mouse movements for drawing
-        canvas.addEventListener('mousedown', (e) => {
-            drawing = true;
-            draw(e);
-        });
-
-        canvas.addEventListener('mouseup', () => {
-            drawing = false;
-            ctx.beginPath();
-        });
-
-        canvas.addEventListener('mousemove', draw);
-
-        function draw(e) {
-            if (!drawing) return;
-
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            // Draw locally
-            ctx.lineWidth = 5;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = currentColor;
-
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-
-            // Send drawing coordinates to the server so other players see it
-            socket.emit('draw_pixel', { x: x, y: y, color: currentColor });
+        function clearGrid() {
+            for (let id in pixels) {
+                pixels[id].style.backgroundColor = 'white';
+            }
+            // Optional: emit clear event if desired, or keep it local
         }
 
-        // Listen for drawing events from other players
+        // Listen for updates from other players
         socket.on('update_pixel', (data) => {
-            ctx.lineWidth = 5;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = data.color;
-            
-            // Render remote strokes (simplified single-point dot/line approach)
-            ctx.lineTo(data.x, data.y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(data.x, data.y);
+            if (pixels[data.id]) {
+                pixels[data.id].style.backgroundColor = data.color;
+            }
         });
     </script>
 </body>
