@@ -1,5 +1,5 @@
-from flask import Flask, render_template
-from flask_socketio import SocketIO, emit, request
+from flask import Flask, render_template, request
+from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -16,7 +16,6 @@ def index():
 
 @socketio.on('connect')
 def handle_connect():
-    # Send the current world state to the newly connected player
     emit('load_world', world_blocks)
     print(f'Client connected: {request.sid}')
 
@@ -37,7 +36,6 @@ def handle_place_block(data):
     else:
         world_blocks[key] = color
 
-    # Broadcast the block update to everyone including sender
     emit('update_block', {'x': x, 'y': y, 'color': color}, broadcast=True)
 
 @socketio.on('clear_board')
@@ -48,7 +46,6 @@ def handle_clear_board():
 
 @socketio.on('mouse_move')
 def handle_mouse_move(data):
-    # Broadcast cursor movement to other players
     emit('update_cursor', {
         'id': request.sid,
         'x': data['x'],
